@@ -28,7 +28,7 @@ import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.oauth2.core.OAuth2AuthenticatedPrincipal;
 
-public class CamundaAuthenticationFilter extends ContainerBasedAuthenticationFilter {
+public class AadOauth2AuthenticationFilter extends ContainerBasedAuthenticationFilter {
 
     private static final String CAMUNDA_ROLE_ADMIN = "camunda-admin";
     private static final String CAMUNDA_GROUP_NAME = "Camunda BPM Administrators";
@@ -37,29 +37,30 @@ public class CamundaAuthenticationFilter extends ContainerBasedAuthenticationFil
     @Override
     public void doFilter(ServletRequest request, ServletResponse response, FilterChain chain)
             throws IOException, ServletException {
-        final HttpServletRequest req = (HttpServletRequest) request;
-        final HttpServletResponse resp = (HttpServletResponse) response;
+        final HttpServletRequest httpRequest = (HttpServletRequest) request;
+        final HttpServletResponse httpResponse = (HttpServletResponse) response;
 
-        String engineName = extractEngineName(req);
+        String engineName = super.extractEngineName(httpRequest);
 
         if (engineName == null) {
             chain.doFilter(request, response);
             return;
         }
 
-        ProcessEngine engine = getAddressedEngine(engineName);
+        ProcessEngine engine = super.getAddressedEngine(engineName);
 
         if (engine == null) {
-            resp.sendError(404, "Process engine " + engineName + " not available");
+            httpResponse.sendError(404, "Process engine " + engineName + " not available");
             return;
         }
 
-        AuthenticationResult authenticationResult = authenticationProvider.extractAuthenticatedUser(req, engine);
+        AuthenticationResult authenticationResult = super.authenticationProvider.extractAuthenticatedUser(httpRequest,
+                engine);
         if (authenticationResult.isAuthenticated()) {
-            Authentications authentications = AuthenticationUtil.getAuthsFromSession(req.getSession());
+            Authentications authentications = AuthenticationUtil.getAuthsFromSession(httpRequest.getSession());
             String authenticatedUser = authenticationResult.getAuthenticatedUser();
 
-            if (!existisAuthentication(authentications, engineName, authenticatedUser)) {
+            if (!super.existisAuthentication(authentications, engineName, authenticatedUser)) {
                 List<String> groups = authenticationResult.getGroups();
                 List<String> tenants = authenticationResult.getTenants();
 
@@ -70,8 +71,8 @@ public class CamundaAuthenticationFilter extends ContainerBasedAuthenticationFil
 
             chain.doFilter(request, response);
         } else {
-            resp.setStatus(Status.UNAUTHORIZED.getStatusCode());
-            authenticationProvider.augmentResponseByAuthenticationChallenge(resp, engine);
+            httpResponse.setStatus(Status.UNAUTHORIZED.getStatusCode());
+            super.authenticationProvider.augmentResponseByAuthenticationChallenge(httpResponse, engine);
         }
     }
 
@@ -86,39 +87,41 @@ public class CamundaAuthenticationFilter extends ContainerBasedAuthenticationFil
         if (userAuthentication != null) {
             return userAuthentication;
         } else {
-            return createCamundaResources(processEngine, username, groups, tenants);
+            return createCamundaResourcesAndAuthenticate(processEngine, username, groups, tenants);
         }
     }
 
-    private UserAuthentication createCamundaResources(ProcessEngine processEngine, String username,
+    private UserAuthentication createCamundaResourcesAndAuthenticate(ProcessEngine processEngine, String username,
             List<String> groups,
             List<String> tenants) {
+
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();
-        IdentityService identityService = processEngine.getIdentityService();
-        AuthorizationService authorizationService = processEngine.getAuthorizationService();
-        boolean adminGroupAvailable = checkIfAdminGroupAvailable(identityService);
+        IdentityService camundaIdentityService = processEngine.getIdentityService();
+        AuthorizationService camundaAuthorizationService = processEngine.getAuthorizationService();
+
+        boolean adminGroupAvailable = checkIfAdminGroupAvailable(camundaIdentityService);
         if (!adminGroupAvailable) {
-            Group newGroup = identityService.newGroup(CAMUNDA_ROLE_ADMIN);
+            Group newGroup = camundaIdentityService.newGroup(CAMUNDA_ROLE_ADMIN);
             newGroup.setName(CAMUNDA_GROUP_NAME);
             newGroup.setType(CAMUNDA_GROUP_TYPE);
-            identityService.saveGroup(newGroup);
+            camundaIdentityService.saveGroup(newGroup);
             for (Resource resource : Resources.values()) {
-                Authorization authorization = authorizationService
+                Authorization authorization = camundaAuthorizationService
                         .createNewAuthorization(Authorization.AUTH_TYPE_GRANT);
                 authorization.addPermission(Permissions.ALL);
                 authorization.setGroupId(CAMUNDA_ROLE_ADMIN);
                 authorization.setResource(resource);
                 authorization.setResourceId("*");
                 authorization.setResourceType(resource.resourceType());
-                authorizationService.saveAuthorization(authorization);
+                camundaAuthorizationService.saveAuthorization(authorization);
             }
         }
-        User newUser = identityService.newUser(username);
+        User newUser = camundaIdentityService.newUser(username);
         newUser.setFirstName(this.getGivenName(authentication));
         newUser.setLastName(this.getFamilyName(authentication));
         newUser.setEmail(this.getEmail(authentication));
-        identityService.saveUser(newUser);
-        identityService.createMembership(username, CAMUNDA_ROLE_ADMIN);
+        camundaIdentityService.saveUser(newUser);
+        camundaIdentityService.createMembership(username, CAMUNDA_ROLE_ADMIN);
         UserAuthentication newUserAuthentication = AuthenticationUtil.createAuthentication(processEngine,
                 username,
                 groups,

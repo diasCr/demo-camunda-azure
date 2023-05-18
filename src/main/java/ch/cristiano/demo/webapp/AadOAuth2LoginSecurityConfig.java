@@ -24,8 +24,10 @@ public class AadOAuth2LoginSecurityConfig {
     public static class ApiWebSecurityConfigurationAdapter extends AadResourceServerWebSecurityConfigurerAdapter {
         protected void configure(HttpSecurity http) throws Exception {
             super.configure(http);
+            // @formatter:off
             http.antMatcher("/engine-rest/**")
                     .authorizeRequests().anyRequest().authenticated();
+            // @formatter:on
         }
     }
 
@@ -44,9 +46,9 @@ public class AadOAuth2LoginSecurityConfig {
 
         @Bean
         @Order(SecurityProperties.BASIC_AUTH_ORDER - 15)
-        public FilterRegistrationBean<CamundaAuthenticationFilter> containerBasedAuthenticationFilter() {
-            FilterRegistrationBean<CamundaAuthenticationFilter> filterRegistration = new FilterRegistrationBean<>();
-            filterRegistration.setFilter(new CamundaAuthenticationFilter());
+        public FilterRegistrationBean<AadOauth2AuthenticationFilter> containerBasedAuthenticationFilter() {
+            FilterRegistrationBean<AadOauth2AuthenticationFilter> filterRegistration = new FilterRegistrationBean<>();
+            filterRegistration.setFilter(new AadOauth2AuthenticationFilter());
             filterRegistration.setInitParameters(Collections.singletonMap("authentication-provider",
                     AadOAuth2AuthenticationProvider.class.getName()));
             filterRegistration.setOrder(101);

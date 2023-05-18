@@ -14,8 +14,6 @@ spring:
     azure:
       active-directory:
         enabled: true
-        # user-group:
-        #   allowed-group-names: camunda-admin
         profile:
           tenant-id: fd915793-26c2-4b3d-9eeb-2747e00ef897
         application-type: web_application_and_resource_server
@@ -27,4 +25,3 @@ logging:
   level:
     org.springframework.security: DEBUG
     org.springframework: INFO
-    org.camunda: INFO
